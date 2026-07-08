@@ -15,14 +15,25 @@ class MincToolkitV2 < Formula
   version "1.9.18-20260305" # MINC_TOOLKIT_VERSION_FULL in CMakeLists.txt
   license "GPL-3.0-only"
 
+  # Self-contained toolkit: it bundles hdf5/netcdf/ITK and installs a private tree
+  # activated via minc-toolkit-config.sh (mirroring upstream's /opt/minc layout).
+  # Linking it into the prefix would collide with other formulae (jpeg-turbo, etc.),
+  # so keep it keg-only and source the config script to use the tools.
+  keg_only "it bundles hdf5/netcdf/ITK and is activated via minc-toolkit-config.sh"
+
   depends_on "bison" => :build
   depends_on "cmake" => :build
   depends_on "flex" => :build
+  depends_on "fftw"        # USE_SYSTEM_FFTW3F/FFTW3D (fftw3f + fftw3)
   depends_on "glfw"        # visual tools use the GLFW/Cocoa backend on Apple
+  depends_on "gsl"         # USE_SYSTEM_GSL (EZminc)
+  depends_on "jpeg-turbo"  # USE_SYSTEM_JPEG (dcm2mnc); avoids the jpeg-turbo keg clash
   depends_on "libarchive"  # replaces the build-time libarchive fetch
   depends_on "libpng"      # USE_SYSTEM_PNG (auto-on on Apple Silicon)
   depends_on "openblas"    # BLAS_PREFERENCE=OpenBLAS (Accelerate lacks LAPACKE)
+  depends_on "openjpeg"    # USE_SYSTEM_OPENJPEG (dcm2mnc)
   depends_on "perl"        # many tools are Perl scripts
+  depends_on "zlib"        # USE_SYSTEM_ZLIB
 
   # ---------------------------------------------------------------------------
   # Pre-cached third-party tarballs.
@@ -35,11 +46,6 @@ class MincToolkitV2 < Formula
   # matches the value hard-coded in cmake-modules/Build*.cmake, so the offline
   # skip actually triggers and the install phase needs no network.
   # ---------------------------------------------------------------------------
-  resource "zlib-ng" do
-    url "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz"
-    sha256 "f9c65aa9c852eb8255b636fd9f07ce1c406f061ec19a2e7d508b318ca0c907d1"
-  end
-
   resource "netcdf" do
     url "https://github.com/Unidata/netcdf-c/archive/refs/tags/v4.7.4.tar.gz"
     sha256 "99930ad7b3c4c1a8e8831fb061cb02b2170fc8e5ccaeda733bd99c3b9d31666b"
@@ -53,26 +59,6 @@ class MincToolkitV2 < Formula
   resource "nifti" do
     url "https://github.com/NIFTI-Imaging/nifti_clib/archive/refs/tags/v3.0.0.tar.gz"
     sha256 "fe6cb1076974df01844f3f4dab1aa844953b3bc1d679126c652975158573d03d"
-  end
-
-  resource "openjpeg" do
-    url "https://github.com/uclouvain/openjpeg/archive/refs/tags/v2.5.4.tar.gz"
-    sha256 "a695fbe19c0165f295a8531b1e4e855cd94d0875d2f88ec4b61080677e27188a"
-  end
-
-  resource "jpeg-turbo" do
-    url "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.4.1/libjpeg-turbo-3.1.4.1.tar.gz"
-    sha256 "ecae8008e2cc9ade2f2c1bb9d5e6d4fb73e7c433866a056bd82980741571a022"
-  end
-
-  resource "gsl" do
-    url "https://ftpmirror.gnu.org/gnu/gsl/gsl-2.4.tar.gz"
-    sha256 "4d46d07b946e7b31c19bbf33dda6204d7bedc2f5462a1bae1d4013426cd1ce9b"
-  end
-
-  resource "fftw" do
-    url "https://fftw.org/fftw-3.3.11.tar.gz"
-    sha256 "5630c24cdeb33b131612f7eb4b1a9934234754f9f388ff8617458d0be6f239a1"
   end
 
   resource "liblbfgs" do
@@ -103,19 +89,14 @@ class MincToolkitV2 < Formula
   # Homebrew resource name => filename the matching GET_PACKAGE() call expects
   # in MT_PACKAGES_PATH (3rd argument in cmake-modules/Build*.cmake).
   RESOURCE_FILES = {
-    "zlib-ng"    => "zlib-ng-2.3.3.tar.gz",
-    "netcdf"     => "netcdf-v4.7.4.tar.gz",
-    "hdf5"       => "hdf5-1.12.1.tar.bz2",
-    "nifti"      => "nifti_clib-3.0.0.tar.gz",
-    "openjpeg"   => "openjpeg-2.5.4.tar.gz",
-    "jpeg-turbo" => "libjpeg-turbo-3.1.4.1.tar.gz",
-    "gsl"        => "gsl-2.4.tar.gz",
-    "fftw"       => "fftw-3.3.11.tar.gz",
-    "liblbfgs"   => "liblbfgs-5ad02fb.tar.gz",
-    "itk"        => "InsightToolkit-4.14-cae3eb9.tar.gz",
-    "c3d"        => "c3d-v0.1.tar.gz",
-    "elastix"    => "elastix-4a561ff4.tar.gz",
-    "abc"        => "ABC-REL1.4.2-minc.tar.gz",
+    "netcdf"   => "netcdf-v4.7.4.tar.gz",
+    "hdf5"     => "hdf5-1.12.1.tar.bz2",
+    "nifti"    => "nifti_clib-3.0.0.tar.gz",
+    "liblbfgs" => "liblbfgs-5ad02fb.tar.gz",
+    "itk"      => "InsightToolkit-4.14-cae3eb9.tar.gz",
+    "c3d"      => "c3d-v0.1.tar.gz",
+    "elastix"  => "elastix-4a561ff4.tar.gz",
+    "abc"      => "ABC-REL1.4.2-minc.tar.gz",
   }.freeze
 
   def install
@@ -135,6 +116,11 @@ class MincToolkitV2 < Formula
       formula_opt_prefix("libarchive"),
       formula_opt_prefix("libpng"),
       formula_opt_prefix("glfw"),
+      formula_opt_prefix("gsl"),
+      formula_opt_prefix("fftw"),
+      formula_opt_prefix("openjpeg"),
+      formula_opt_prefix("jpeg-turbo"),
+      formula_opt_prefix("zlib"),
     ].join(";")
 
     args = %W[
@@ -152,6 +138,12 @@ class MincToolkitV2 < Formula
       -DBLAS_PREFERENCE=OpenBLAS
       -DUSE_SYSTEM_LIBARCHIVE=ON
       -DUSE_SYSTEM_PNG=ON
+      -DUSE_SYSTEM_JPEG=ON
+      -DUSE_SYSTEM_OPENJPEG=ON
+      -DUSE_SYSTEM_GSL=ON
+      -DUSE_SYSTEM_ZLIB=ON
+      -DUSE_SYSTEM_FFTW3F=ON
+      -DUSE_SYSTEM_FFTW3D=ON
       -DMT_USE_OPENMP=OFF
       -DBUILD_TESTING=OFF
     ]
