@@ -6,7 +6,11 @@ class MincToolkitV2 < Formula
   # must be present before configure; Homebrew's git strategy checks them out
   # recursively. Bump `revision` (and any changed resources below) when the
   # branch advances.
+  # `branch:` is required alongside `revision:` so Homebrew fetches develop-1.9.18
+  # (not the repo's default branch); otherwise the pinned commit is not in the
+  # shallow clone and checkout fails with "unable to read tree".
   url "https://github.com/BIC-MNI/minc-toolkit-v2.git",
+      branch:   "develop-1.9.18",
       revision: "69c133b332f5b3602d327ced86e3da7e07879a60"
   version "1.9.18-20260305" # MINC_TOOLKIT_VERSION_FULL in CMakeLists.txt
   license "GPL-3.0-only"
