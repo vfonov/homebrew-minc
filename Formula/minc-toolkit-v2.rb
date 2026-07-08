@@ -33,7 +33,6 @@ class MincToolkitV2 < Formula
   depends_on "openblas"    # BLAS_PREFERENCE=OpenBLAS (Accelerate lacks LAPACKE)
   depends_on "openjpeg"    # USE_SYSTEM_OPENJPEG (dcm2mnc)
   depends_on "perl"        # many tools are Perl scripts
-  depends_on "zlib"        # USE_SYSTEM_ZLIB
 
   # ---------------------------------------------------------------------------
   # Pre-cached third-party tarballs.
@@ -46,6 +45,14 @@ class MincToolkitV2 < Formula
   # matches the value hard-coded in cmake-modules/Build*.cmake, so the offline
   # skip actually triggers and the install phase needs no network.
   # ---------------------------------------------------------------------------
+  # zlib-ng is bundled (not USE_SYSTEM_ZLIB): BuildHDF5.cmake passes zlib to HDF5
+  # as ${ZLIB_STATIC_LIBRARY}, a variable only the bundled build_zlib() sets, so
+  # system zlib leaves HDF5 without -lz and its deflate filter fails to link.
+  resource "zlib-ng" do
+    url "https://github.com/zlib-ng/zlib-ng/archive/refs/tags/2.3.3.tar.gz"
+    sha256 "f9c65aa9c852eb8255b636fd9f07ce1c406f061ec19a2e7d508b318ca0c907d1"
+  end
+
   resource "netcdf" do
     url "https://github.com/Unidata/netcdf-c/archive/refs/tags/v4.7.4.tar.gz"
     sha256 "99930ad7b3c4c1a8e8831fb061cb02b2170fc8e5ccaeda733bd99c3b9d31666b"
@@ -89,6 +96,7 @@ class MincToolkitV2 < Formula
   # Homebrew resource name => filename the matching GET_PACKAGE() call expects
   # in MT_PACKAGES_PATH (3rd argument in cmake-modules/Build*.cmake).
   RESOURCE_FILES = {
+    "zlib-ng"  => "zlib-ng-2.3.3.tar.gz",
     "netcdf"   => "netcdf-v4.7.4.tar.gz",
     "hdf5"     => "hdf5-1.12.1.tar.bz2",
     "nifti"    => "nifti_clib-3.0.0.tar.gz",
@@ -120,7 +128,6 @@ class MincToolkitV2 < Formula
       formula_opt_prefix("fftw"),
       formula_opt_prefix("openjpeg"),
       formula_opt_prefix("jpeg-turbo"),
-      formula_opt_prefix("zlib"),
     ].join(";")
 
     args = %W[
@@ -141,7 +148,6 @@ class MincToolkitV2 < Formula
       -DUSE_SYSTEM_JPEG=ON
       -DUSE_SYSTEM_OPENJPEG=ON
       -DUSE_SYSTEM_GSL=ON
-      -DUSE_SYSTEM_ZLIB=ON
       -DUSE_SYSTEM_FFTW3F=ON
       -DUSE_SYSTEM_FFTW3D=ON
       -DMT_USE_OPENMP=OFF
