@@ -11,7 +11,7 @@ class MincToolkitV2 < Formula
   # shallow clone and checkout fails with "unable to read tree".
   url "https://github.com/BIC-MNI/minc-toolkit-v2.git",
       branch:   "develop-1.9.18",
-      revision: "bbdd1ae761446aab659b1a85b82f0c386b568848"
+      revision: "e7bf58a41c30ddd2572d05f2a9a0ad2235a773f6"
   version "1.9.18-20260305" # MINC_TOOLKIT_VERSION_FULL in CMakeLists.txt
   license "GPL-3.0-only"
 
