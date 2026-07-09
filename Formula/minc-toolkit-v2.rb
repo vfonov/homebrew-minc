@@ -33,6 +33,8 @@ class MincToolkitV2 < Formula
   depends_on "openblas"    # BLAS_PREFERENCE=OpenBLAS (Accelerate lacks LAPACKE)
   depends_on "openjpeg"    # USE_SYSTEM_OPENJPEG (dcm2mnc)
   depends_on "perl"        # many tools are Perl scripts
+  depends_on "libx11"      # some visual tools
+  depends_on "libxext"     # same
 
   # ---------------------------------------------------------------------------
   # Pre-cached third-party tarballs.
