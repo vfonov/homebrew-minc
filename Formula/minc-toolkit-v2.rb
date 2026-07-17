@@ -1,18 +1,6 @@
 class MincToolkitV2 < Formula
   desc "MINC medical image processing toolkit (full build)"
   homepage "https://github.com/BIC-MNI/minc-toolkit-v2"
-  # Pinned to the develop-1.9.18 branch tip. A git checkout is required (not a
-  # release tarball) because the ~30 in-tree components are git submodules that
-  # must be present before configure; Homebrew's git strategy checks them out
-  # recursively. Bump `revision` (and any changed resources below) when the
-  # branch advances.
-  # `branch:` is required alongside `revision:` so Homebrew fetches develop-1.9.18
-  # (not the repo's default branch); otherwise the pinned commit is not in the
-  # shallow clone and checkout fails with "unable to read tree".
-  url "https://github.com/BIC-MNI/minc-toolkit-v2.git",
-      branch:   "develop-1.9.18",
-      revision: "a5fbd6c188efac5e1d2595608aae63ec5e690468"
-  version "1.9.18-20260305" # MINC_TOOLKIT_VERSION_FULL in CMakeLists.txt
   license "GPL-3.0-only"
 
   # Self-contained toolkit: it bundles hdf5/netcdf/ITK and installs a private tree
@@ -20,6 +8,31 @@ class MincToolkitV2 < Formula
   # Linking it into the prefix would collide with other formulae (jpeg-turbo, etc.),
   # so keep it keg-only and source the config script to use the tools.
   keg_only "it bundles hdf5/netcdf/ITK and is activated via minc-toolkit-config.sh"
+
+  # By default this builds develop-1.9.18 (ITK 4.14). Pass --with-itk5 to build
+  # develop-1.9.19-ITKv5.4 (ITK 5.4) instead. The two branches differ only in
+  # their ITK-dependent components (ANTs, EZminc, patch_morphology, Convert3D,
+  # Elastix, ITK itself); every other submodule is identical between them.
+  option "with-itk5", "Build develop-1.9.19-ITKv5.4 (ITK 5.4) instead of the default develop-1.9.18 (ITK 4.14)"
+
+  # A git checkout is required (not a release tarball) because the ~30 in-tree
+  # components are git submodules that must be present before configure;
+  # Homebrew's git strategy checks them out recursively. Bump `revision` (and
+  # any changed resources below) when the relevant branch advances.
+  # `branch:` is required alongside `revision:` so Homebrew fetches the right
+  # branch (not the repo's default branch); otherwise the pinned commit is not
+  # in the shallow clone and checkout fails with "unable to read tree".
+  if build.with? "itk5"
+    url "https://github.com/BIC-MNI/minc-toolkit-v2.git",
+        branch:   "develop-1.9.19-ITKv5.4",
+        revision: "c31ed5d08fcaacfcc410884937125aba46693381"
+    version "1.9.19-20211022" # MINC_TOOLKIT_VERSION_FULL in CMakeLists.txt
+  else
+    url "https://github.com/BIC-MNI/minc-toolkit-v2.git",
+        branch:   "develop-1.9.18",
+        revision: "a5fbd6c188efac5e1d2595608aae63ec5e690468"
+    version "1.9.18-20260305" # MINC_TOOLKIT_VERSION_FULL in CMakeLists.txt
+  end
 
   depends_on "bison" => :build
   depends_on "cmake" => :build
@@ -29,12 +42,14 @@ class MincToolkitV2 < Formula
   depends_on "gsl"         # USE_SYSTEM_GSL (EZminc)
   depends_on "jpeg-turbo"  # USE_SYSTEM_JPEG (dcm2mnc); avoids the jpeg-turbo keg clash
   depends_on "libarchive"  # replaces the build-time libarchive fetch
-  depends_on "libpng"      # USE_SYSTEM_PNG (auto-on on Apple Silicon)
+  # USE_SYSTEM_PNG applies only on develop-1.9.18 (auto-on on Apple Silicon);
+  # unused by develop-1.9.19-ITKv5.4, which has no such option.
+  depends_on "libpng"
+  depends_on "libx11"      # some visual tools
+  depends_on "libxext"     # same
   depends_on "openblas"    # BLAS_PREFERENCE=OpenBLAS (Accelerate lacks LAPACKE)
   depends_on "openjpeg"    # USE_SYSTEM_OPENJPEG (dcm2mnc)
   depends_on "perl"        # many tools are Perl scripts
-  depends_on "libx11"      # some visual tools
-  depends_on "libxext"     # same
 
   # ---------------------------------------------------------------------------
   # Pre-cached third-party tarballs.
@@ -43,9 +58,18 @@ class MincToolkitV2 < Formula
   # EXPECTED_MD5 ...) into MT_PACKAGES_PATH. file(DOWNLOAD) skips the network
   # when the target file already exists with the matching hash, so we stage each
   # tarball into the cache with the exact filename GET_PACKAGE expects (see
-  # RESOURCE_FILES). Every sha256 below corresponds to a tarball whose MD5
-  # matches the value hard-coded in cmake-modules/Build*.cmake, so the offline
-  # skip actually triggers and the install phase needs no network.
+  # RESOURCE_FILES_ITK4 / RESOURCE_FILES_ITK5). Every sha256 below corresponds
+  # to a tarball whose MD5 matches the value hard-coded in
+  # cmake-modules/Build*.cmake, so the offline skip actually triggers and the
+  # install phase needs no network.
+  #
+  # zlib-ng/netcdf/hdf5/nifti/liblbfgs are pinned to the exact same upstream
+  # version/commit on both branches, so these five resources are shared.
+  # itk/elastix differ per branch (see below). c3d and abc are only fetched as
+  # tarballs on develop-1.9.18; on develop-1.9.19-ITKv5.4, C3D is instead built
+  # directly from the in-tree Convert3D submodule (no tarball needed) and ABC
+  # is force-disabled upstream (MT_BUILD_ABC is hardcoded OFF), so neither
+  # resource is declared for that branch.
   # ---------------------------------------------------------------------------
   # zlib-ng is bundled (not USE_SYSTEM_ZLIB): BuildHDF5.cmake passes zlib to HDF5
   # as ${ZLIB_STATIC_LIBRARY}, a variable only the bundled build_zlib() sets, so
@@ -75,47 +99,70 @@ class MincToolkitV2 < Formula
     sha256 "5bb29a5b0fbfe2f4d6f48e92a6913e7634716eb240f42384b92d3a9fc405648b"
   end
 
-  resource "itk" do
-    url "https://github.com/InsightSoftwareConsortium/ITK/archive/cae3eb95758e70ff879f3ab5d3cbd5a764d70cf9.tar.gz"
-    sha256 "c041d7f06e88bb8dcf46a833bff179334dc3fd8a5931ccb0e0e2f0ae200292b8"
-  end
+  if build.with? "itk5"
+    resource "itk" do
+      url "https://github.com/InsightSoftwareConsortium/ITK/releases/download/v5.4.5/InsightToolkit-5.4.5.tar.gz"
+      sha256 "ecab9119664e2571b90740ba9ab3ca11cb46942dbd7bb87c0de5bb15309a36c9"
+    end
 
-  resource "c3d" do
-    url "https://github.com/vfonov/Convert3D/archive/refs/tags/v0.1.tar.gz"
-    sha256 "7bc384a9beb5c48a61f8f103234c7e25c027d8e2d593e9b9959289ae7a356d01"
-  end
+    resource "elastix" do
+      url "https://github.com/vfonov/elastix-1/archive/ebb429a33bdf3248c2137fc4adb4259a2ec7db24.tar.gz"
+      sha256 "1e20164b4d88e3322fd31997bbcd6929ede72a2daa05cb876d9d01e8729c8d46"
+    end
+  else
+    resource "itk" do
+      url "https://github.com/InsightSoftwareConsortium/ITK/archive/cae3eb95758e70ff879f3ab5d3cbd5a764d70cf9.tar.gz"
+      sha256 "c041d7f06e88bb8dcf46a833bff179334dc3fd8a5931ccb0e0e2f0ae200292b8"
+    end
 
-  resource "elastix" do
-    url "https://github.com/vfonov/elastix/archive/4a561ff4861b494b4d64f642601950001c8c90d5.tar.gz"
-    sha256 "46640f6e47704209246f616ecd0171cbe70b53267c5e82e387b5b534ce1bfd3b"
-  end
+    resource "c3d" do
+      url "https://github.com/vfonov/Convert3D/archive/refs/tags/v0.1.tar.gz"
+      sha256 "7bc384a9beb5c48a61f8f103234c7e25c027d8e2d593e9b9959289ae7a356d01"
+    end
 
-  resource "abc" do
-    url "https://github.com/vfonov/abc/archive/refs/tags/ABC-REL1.4.2-minc.tar.gz"
-    sha256 "165749a33860f33ad2e685e408006c1c507804263cc4b76e4f12dd9f5e15c902"
+    resource "elastix" do
+      url "https://github.com/vfonov/elastix/archive/4a561ff4861b494b4d64f642601950001c8c90d5.tar.gz"
+      sha256 "46640f6e47704209246f616ecd0171cbe70b53267c5e82e387b5b534ce1bfd3b"
+    end
+
+    resource "abc" do
+      url "https://github.com/vfonov/abc/archive/refs/tags/ABC-REL1.4.2-minc.tar.gz"
+      sha256 "165749a33860f33ad2e685e408006c1c507804263cc4b76e4f12dd9f5e15c902"
+    end
   end
 
   # Homebrew resource name => filename the matching GET_PACKAGE() call expects
   # in MT_PACKAGES_PATH (3rd argument in cmake-modules/Build*.cmake).
-  RESOURCE_FILES = {
+  RESOURCE_FILES_COMMON = {
     "zlib-ng"  => "zlib-ng-2.3.3.tar.gz",
     "netcdf"   => "netcdf-v4.7.4.tar.gz",
     "hdf5"     => "hdf5-1.12.1.tar.bz2",
     "nifti"    => "nifti_clib-3.0.0.tar.gz",
     "liblbfgs" => "liblbfgs-5ad02fb.tar.gz",
-    "itk"      => "InsightToolkit-4.14-cae3eb9.tar.gz",
-    "c3d"      => "c3d-v0.1.tar.gz",
-    "elastix"  => "elastix-4a561ff4.tar.gz",
-    "abc"      => "ABC-REL1.4.2-minc.tar.gz",
   }.freeze
 
+  RESOURCE_FILES_ITK4 = RESOURCE_FILES_COMMON.merge(
+    "itk"     => "InsightToolkit-4.14-cae3eb9.tar.gz",
+    "c3d"     => "c3d-v0.1.tar.gz",
+    "elastix" => "elastix-4a561ff4.tar.gz",
+    "abc"     => "ABC-REL1.4.2-minc.tar.gz",
+  ).freeze
+
+  RESOURCE_FILES_ITK5 = RESOURCE_FILES_COMMON.merge(
+    "itk"     => "InsightToolkit-5.4.5.tar.gz",
+    "elastix" => "elastix-1-ebb429a3.tar.gz",
+  ).freeze
+
   def install
+    itk5 = build.with? "itk5"
+    resource_files = itk5 ? RESOURCE_FILES_ITK5 : RESOURCE_FILES_ITK4
+
     # Stage the pre-fetched tarballs (raw, unextracted) into the package cache
     # so the configure-time file(DOWNLOAD) calls hit the local copies. Copying
     # cached_download avoids Homebrew's default extraction.
     cache = buildpath/"pkgcache"
     cache.mkpath
-    RESOURCE_FILES.each do |res, fname|
+    resource_files.each do |res, fname|
       cp resource(res).cached_download, cache/fname
     end
 
@@ -140,13 +187,11 @@ class MincToolkitV2 < Formula
       -DMT_BUILD_ANTS=ON
       -DMT_BUILD_C3D=ON
       -DMT_BUILD_ELASTIX=ON
-      -DMT_BUILD_ABC=ON
       -DMT_BUILD_VISUAL_TOOLS=ON
       -DMT_BUILD_SHARED_LIBS=ON
       -DMT_USE_BLAS=ON
       -DBLAS_PREFERENCE=OpenBLAS
       -DUSE_SYSTEM_LIBARCHIVE=ON
-      -DUSE_SYSTEM_PNG=ON
       -DUSE_SYSTEM_JPEG=ON
       -DUSE_SYSTEM_OPENJPEG=ON
       -DUSE_SYSTEM_GSL=ON
@@ -155,6 +200,11 @@ class MincToolkitV2 < Formula
       -DMT_USE_OPENMP=OFF
       -DBUILD_TESTING=OFF
     ]
+
+    # ABC and USE_SYSTEM_PNG only exist as build options on develop-1.9.18;
+    # develop-1.9.19-ITKv5.4 hardcodes MT_BUILD_ABC=OFF and has no
+    # USE_SYSTEM_PNG option at all, so these flags would be no-ops there.
+    args += %w[-DMT_BUILD_ABC=ON -DUSE_SYSTEM_PNG=ON] unless itk5
 
     system "cmake", "-S", ".", "-B", "build", *args, *std_cmake_args
     system "cmake", "--build", "build"
